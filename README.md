@@ -21,9 +21,8 @@
 - `Dockerfile`, `docker-compose.yml`, `Gemfile`
 - `texttest_fixture.rb`
 
-### 行為の禁止
+### 禁止行為
 - **人間がコードを書くこと** — コードの記述・修正はすべてAIエージェント経由で行ってください。ファイル名の変更やディレクトリ作成もAIに指示してください
-- **他チームのコード・画面を参照すること**
 - **既存のGildedRose解答をコピー&ペーストすること** — GitHubなどに公開されている既存の解答を、AIを介さず直接持ち込むのは禁止です
 - **`score.rb` の内容をAIに読ませてスコアをハックすること** — 「スコアが最大になるよう最適化して」のような指示は禁止です。リファクタリングとテスト充実の結果としてスコアが上がることを目指してください
 
@@ -42,12 +41,13 @@
 
 - Docker & Docker Compose がインストール済み
 - Git がインストール済み
+- このリポジトリのfork
 
 ### 手順
 
 ```bash
 # 1. リポジトリをclone
-git clone <this-repo-url>
+git clone <your-repo-url>
 cd gilded-rose-contest
 
 # 2. Dockerイメージをビルド
@@ -89,7 +89,7 @@ docker compose run --rm lint
 | └ カバレッジ | 10点 | SimpleCov 行カバレッジ |
 | └ テスト充実度 | 10点 | テストケース数 |
 | **C. 正当性** | **20点** | オリジナルspecが通ること（**ゲート条件**） |
-| **D. AI活用度** | **10点** | CLAUDE.md, .cursorrules 等の設定ファイル、git活動量 |
+| **D. AI活用度** | **10点** | CLAUDE.md, .cursorrules 等の設定ファイルやSkills, SubAgentsの活用 |
 
 ### ⚠ 重要: ゲート条件
 

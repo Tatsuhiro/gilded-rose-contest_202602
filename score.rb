@@ -303,7 +303,7 @@ class RefactoringScorer
     ai_details = []
 
     # ----------------------------------------------------------
-    # 1. Agent instruction file exists (3 pts)
+    # 1. Agent instruction file exists (4 pts)
     #    どのエージェントでも「指示ファイルを用意した」ことを公平に評価
     # ----------------------------------------------------------
     agent_instruction_files = {
@@ -332,24 +332,61 @@ class RefactoringScorer
       end
     end
 
-    # .claude/ 配下のカスタムコマンド等も検出
+    # .claude/ 配下のSkills, SubAgents, Commandsを検出
+    claude_skills = Dir.glob(".claude/skills/*/SKILL.md")
+    claude_agents = Dir.glob(".claude/agents/*.md")
+    claude_commands = Dir.glob(".claude/commands/*.md")
+
+    if claude_skills.any?
+      found_agents["Claude Code"] ||= []
+      found_agents["Claude Code"] << "skills (#{claude_skills.length})"
+    end
+    if claude_agents.any?
+      found_agents["Claude Code"] ||= []
+      found_agents["Claude Code"] << "subagents (#{claude_agents.length})"
+    end
+    if claude_commands.any?
+      found_agents["Claude Code"] ||= []
+      found_agents["Claude Code"] << "commands (#{claude_commands.length})"
+    end
+
+    # .claude/ 配下のその他ファイルも検出
     claude_extras = Dir.glob(".claude/**/*", File::FNM_DOTMATCH)
                        .reject { |f| File.directory?(f) }
                        .reject { |f| agent_instruction_files.key?(f) }
+                       .reject { |f| f.match?(%r{\.claude/(skills|agents|commands)/}) }
     if claude_extras.any?
       found_agents["Claude Code"] ||= []
-      found_agents["Claude Code"] += claude_extras
+      found_agents["Claude Code"] << "other config (#{claude_extras.length} files)"
+    end
+
+    # .github/ 配下のSkills, Agents, Promptsを検出（GitHub Copilot）
+    copilot_skills = Dir.glob(".github/skills/*/SKILL.md")
+    copilot_agents = Dir.glob(".github/agents/*.md") + Dir.glob(".github/agents/**/*.agent.md")
+    copilot_prompts = Dir.glob(".github/prompts/*.md")
+
+    if copilot_skills.any?
+      found_agents["GitHub Copilot"] ||= []
+      found_agents["GitHub Copilot"] << "skills (#{copilot_skills.length})"
+    end
+    if copilot_agents.any?
+      found_agents["GitHub Copilot"] ||= []
+      found_agents["GitHub Copilot"] << "agents (#{copilot_agents.length})"
+    end
+    if copilot_prompts.any?
+      found_agents["GitHub Copilot"] ||= []
+      found_agents["GitHub Copilot"] << "prompts (#{copilot_prompts.length})"
     end
 
     if found_agents.any?
-      points += 3.0
+      points += 4.0
       found_agents.each do |agent, files|
         ai_details << "#{agent}: #{files.join(', ')}"
       end
     end
 
     # ----------------------------------------------------------
-    # 2. Instruction file content quality (4 pts)
+    # 2. Instruction file content quality (6 pts)
     #    中身が充実しているかを語数で判定（エージェント不問）
     # ----------------------------------------------------------
     instruction_candidates = %w[
@@ -362,6 +399,17 @@ class RefactoringScorer
       .aider.conf.yml
       AGENTS.md
     ]
+
+    # Claude Code Skills, SubAgents, Commands のmdファイルも候補に追加
+    instruction_candidates += Dir.glob(".claude/skills/*/SKILL.md")
+    instruction_candidates += Dir.glob(".claude/agents/*.md")
+    instruction_candidates += Dir.glob(".claude/commands/*.md")
+
+    # GitHub Copilot Skills, Agents, Prompts のmdファイルも候補に追加
+    instruction_candidates += Dir.glob(".github/skills/*/SKILL.md")
+    instruction_candidates += Dir.glob(".github/agents/*.md")
+    instruction_candidates += Dir.glob(".github/agents/**/*.agent.md")
+    instruction_candidates += Dir.glob(".github/prompts/*.md")
 
     best_word_count = 0
     best_file = nil
@@ -378,39 +426,18 @@ class RefactoringScorer
 
     if best_file
       if best_word_count >= 80
-        points += 4.0
+        points += 6.0
         ai_details << "#{best_file}: #{best_word_count} words (comprehensive)"
       elsif best_word_count >= 50
-        points += 3.0
+        points += 4.0
         ai_details << "#{best_file}: #{best_word_count} words (substantial)"
       elsif best_word_count >= 20
-        points += 1.5
+        points += 2.0
         ai_details << "#{best_file}: #{best_word_count} words (basic)"
       else
-        points += 0.5
+        points += 1.0
         ai_details << "#{best_file}: #{best_word_count} words (minimal)"
       end
-    end
-
-    # ----------------------------------------------------------
-    # 3. Git commit activity (3 pts)
-    #    AIとの反復的なやりとりの痕跡
-    # ----------------------------------------------------------
-    git_log, _, status = Open3.capture3("git log --oneline --since='3 hours ago' 2>/dev/null")
-    if status.success?
-      commit_count = git_log.lines.count
-      if commit_count >= 10
-        points += 3.0
-        ai_details << "#{commit_count} commits (active iteration)"
-      elsif commit_count >= 5
-        points += 2.0
-        ai_details << "#{commit_count} commits (moderate)"
-      elsif commit_count >= 1
-        points += 1.0
-        ai_details << "#{commit_count} commits"
-      end
-    else
-      ai_details << "git log not available"
     end
 
     @details[:ai_usage] = ai_details
