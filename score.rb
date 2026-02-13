@@ -303,7 +303,7 @@ class RefactoringScorer
     ai_details = []
 
     # ----------------------------------------------------------
-    # 1. Agent instruction file exists (3 pts)
+    # 1. Agent instruction file exists (4 pts)
     #    どのエージェントでも「指示ファイルを用意した」ことを公平に評価
     # ----------------------------------------------------------
     agent_instruction_files = {
@@ -342,14 +342,14 @@ class RefactoringScorer
     end
 
     if found_agents.any?
-      points += 3.0
+      points += 4.0
       found_agents.each do |agent, files|
         ai_details << "#{agent}: #{files.join(', ')}"
       end
     end
 
     # ----------------------------------------------------------
-    # 2. Instruction file content quality (4 pts)
+    # 2. Instruction file content quality (6 pts)
     #    中身が充実しているかを語数で判定（エージェント不問）
     # ----------------------------------------------------------
     instruction_candidates = %w[
@@ -378,39 +378,18 @@ class RefactoringScorer
 
     if best_file
       if best_word_count >= 80
-        points += 4.0
+        points += 6.0
         ai_details << "#{best_file}: #{best_word_count} words (comprehensive)"
       elsif best_word_count >= 50
-        points += 3.0
+        points += 4.0
         ai_details << "#{best_file}: #{best_word_count} words (substantial)"
       elsif best_word_count >= 20
-        points += 1.5
+        points += 2.0
         ai_details << "#{best_file}: #{best_word_count} words (basic)"
       else
-        points += 0.5
+        points += 1.0
         ai_details << "#{best_file}: #{best_word_count} words (minimal)"
       end
-    end
-
-    # ----------------------------------------------------------
-    # 3. Git commit activity (3 pts)
-    #    AIとの反復的なやりとりの痕跡
-    # ----------------------------------------------------------
-    git_log, _, status = Open3.capture3("git log --oneline --since='3 hours ago' 2>/dev/null")
-    if status.success?
-      commit_count = git_log.lines.count
-      if commit_count >= 10
-        points += 3.0
-        ai_details << "#{commit_count} commits (active iteration)"
-      elsif commit_count >= 5
-        points += 2.0
-        ai_details << "#{commit_count} commits (moderate)"
-      elsif commit_count >= 1
-        points += 1.0
-        ai_details << "#{commit_count} commits"
-      end
-    else
-      ai_details << "git log not available"
     end
 
     @details[:ai_usage] = ai_details
