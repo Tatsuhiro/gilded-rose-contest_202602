@@ -1,0 +1,9 @@
+# SimpleCov coverage reports
+coverage/
+
+# Bundler
+.bundle/
+vendor/bundle/
+
+# RSpec
+.rspec_status

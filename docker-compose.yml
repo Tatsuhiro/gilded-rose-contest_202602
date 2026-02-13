@@ -1,0 +1,36 @@
+services:
+  score:
+    build: .
+    volumes:
+      # プロジェクト全体をマウント（リファクタリング結果を即反映）
+      - .:/app
+      # .gitもマウントしてgit log解析を可能にする
+      - .git:/app/.git:ro
+    command: ruby score.rb
+    environment:
+      - TERM=xterm-256color
+
+  score-json:
+    build: .
+    volumes:
+      - .:/app
+      - .git:/app/.git:ro
+    command: ruby score.rb --json
+
+  baseline:
+    build: .
+    volumes:
+      - .:/app
+    command: ruby score.rb --baseline
+
+  test:
+    build: .
+    volumes:
+      - .:/app
+    command: bundle exec rspec --format documentation --pattern '{spec/**/*_spec.rb,*_spec.rb}'
+
+  lint:
+    build: .
+    volumes:
+      - .:/app
+    command: bundle exec rubocop
