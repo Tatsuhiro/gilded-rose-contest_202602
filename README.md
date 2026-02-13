@@ -46,8 +46,8 @@
 ### 手順
 
 ```bash
-# 1. リポジトリをclone
-git clone <this-repo-url>
+# 1. リポジトリを作業者のリポジトリとしてfork
+git clone <your-repo-url>
 cd gilded-rose-contest
 
 # 2. Dockerイメージをビルド
