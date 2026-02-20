@@ -6,17 +6,17 @@
 # =============================================================
 #
 # Usage:
-#   docker compose run score            # スコア表示
-#   docker compose run score-json       # JSON出力
-#   docker compose run baseline         # ベースライン計測
-#   docker compose run test             # テストだけ実行
-#   docker compose run lint             # RuboCopだけ実行
+#   docker compose run --rm score            # スコア表示
+#   docker compose run --rm score-json       # JSON出力
+#   docker compose run --rm baseline         # ベースライン計測
+#   docker compose run --rm test             # テストだけ実行
+#   docker compose run --rm lint             # RuboCopだけ実行
 #
 # Scoring Breakdown (100 points):
 #   A. Code Quality    : 40 pts (RuboCop 15, Flog 15, Flay 10)
 #   B. Tests           : 30 pts (Passing 10, Coverage 10, Richness 10)
 #   C. Correctness     : 20 pts (Original specs must pass - gate condition)
-#   D. AI Agent Usage  : 10 pts (CLAUDE.md / rules / git log analysis)
+#   D. AI Agent Usage  : 10 pts (Agent config files & content quality)
 # =============================================================
 
 require "json"
@@ -28,7 +28,7 @@ class RefactoringScorer
   TOTAL_POINTS = 100
 
   # --- Baseline values (GildedRose original, pre-refactoring) ---
-  # Run `docker compose run baseline` to recalculate
+  # Run `docker compose run --rm baseline` to recalculate
   BASELINE = {
     rubocop_offenses: 37,
     flog_total: 104.4,
@@ -103,7 +103,6 @@ class RefactoringScorer
       result = JSON.parse(stdout)
       result.dig("summary", "offense_count").to_i
     rescue StandardError
-      # Fallback to text parsing
       text_out, _, _ = Open3.capture3("rubocop #{target} 2>/dev/null")
       match = text_out.match(/(\d+)\s+offense/)
       match ? match[1].to_i : BASELINE[:rubocop_offenses]
@@ -163,7 +162,7 @@ class RefactoringScorer
   def score_tests
     spec_files = Dir.glob("spec/**/*_spec.rb") +
                  Dir.glob("test/**/*_test.rb") +
-                 Dir.glob("*_spec.rb")  # フラット構成対応
+                 Dir.glob("*_spec.rb")
     team_specs = spec_files.reject { |f| f.include?("golden") || f.include?("original") }
 
     @details[:has_tests] = !team_specs.empty?
@@ -179,36 +178,10 @@ class RefactoringScorer
       return
     end
 
-    # Run rspec with SimpleCov injection (without modifying project files)
-    env = { "CONTEST_COVERAGE" => "1" }
-    rspec_cmd = <<~SH
-      ruby -e "
-        require 'simplecov'
-        SimpleCov.start do
-          add_filter '/spec/'
-          add_filter '/test/'
-          add_filter 'score.rb'
-        end
-        " -r rspec/autorun 2>/dev/null || true
-    SH
+    spec_pattern = team_specs.join(" ")
 
-    # Simpler approach: run rspec directly with coverage via env var
-    stdout, stderr, status = Open3.capture3(
-      env,
-      "ruby", "-r", "simplecov", "-e",
-      <<~RUBY
-        SimpleCov.start do
-          add_filter '/spec/'
-          add_filter '/test/'
-          add_filter 'score.rb'
-          enable_coverage :branch
-        end
-        require 'rspec/autorun'
-        RSpec.configure { |c| c.formatter = :json }
-      RUBY
-    )
-
-    # Parse rspec JSON output
+    # 1. JSON形式でテスト結果を取得
+    stdout, _, _ = Open3.capture3("rspec --format json #{spec_pattern}")
     rspec_result = begin
       JSON.parse(stdout)
     rescue StandardError
@@ -220,16 +193,8 @@ class RefactoringScorer
       failure_count = rspec_result.dig("summary", "failure_count").to_i
       all_passed = failure_count == 0
     else
-      # Fallback: run normally
-      stdout2, _, status2 = Open3.capture3(env, "bundle", "exec", "rspec", "--format", "json")
-      rspec_result = begin
-        JSON.parse(stdout2)
-      rescue StandardError
-        nil
-      end
-      test_count = rspec_result&.dig("summary", "example_count").to_i
-      failure_count = rspec_result&.dig("summary", "failure_count").to_i
-      all_passed = failure_count == 0
+      test_count = 0
+      all_passed = false
     end
 
     @details[:test_count] = test_count
@@ -239,10 +204,27 @@ class RefactoringScorer
     @scores[:test_existence] = if all_passed && test_count > 0
                                  10.0
                                elsif test_count > 0
-                                 3.0 # tests exist but some fail
+                                 3.0
                                else
                                  0.0
                                end
+
+    # 2. SimpleCovでカバレッジ計測（別途実行）
+    simplecov_helper = ".simplecov_contest.rb"
+    File.write(simplecov_helper, <<~RUBY)
+      require 'simplecov'
+      SimpleCov.start do
+        add_filter '/spec/'
+        add_filter '/test/'
+        add_filter 'score.rb'
+        add_filter 'golden_master_spec.rb'
+        add_filter 'texttest_fixture.rb'
+        add_filter '.simplecov_contest.rb'
+      end
+    RUBY
+
+    Open3.capture3("rspec --require ./#{simplecov_helper} #{spec_pattern} 2>/dev/null")
+    File.delete(simplecov_helper) if File.exist?(simplecov_helper)
 
     # Coverage (10 pts)
     coverage_pct = read_coverage
@@ -276,7 +258,7 @@ class RefactoringScorer
       return
     end
 
-    _, _, status = Open3.capture3("bundle", "exec", "rspec", original_spec, "--format", "progress")
+    _, _, status = Open3.capture3("rspec", original_spec, "--format", "progress")
     passed = status.success?
 
     @details[:correctness] = passed ? "PASS ✓" : "FAIL ✗"
@@ -285,7 +267,6 @@ class RefactoringScorer
 
   def find_original_spec
     # golden_master_spec.rb を最優先（ゲート条件用）
-    # オリジナルの gilded_rose_spec.rb は "fixme" テストなので除外
     candidates = %w[
       golden_master_spec.rb
       spec/golden_master_spec.rb

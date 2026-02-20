@@ -23,10 +23,10 @@ services:
     build: .
     volumes:
       - .:/app
-    command: bundle exec rspec --format documentation --pattern '{spec/**/*_spec.rb,*_spec.rb}'
+    command: rspec --format documentation --pattern '{spec/**/*_spec.rb,*_spec.rb}'
 
   lint:
     build: .
     volumes:
       - .:/app
-    command: bundle exec rubocop
+    command: rubocop
