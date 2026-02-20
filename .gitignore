@@ -4,6 +4,7 @@ coverage/
 # Bundler
 .bundle/
 vendor/bundle/
+Gemfile.lock
 
 # RSpec
 .rspec_status
